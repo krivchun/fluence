@@ -1,6 +1,7 @@
 import {getNode, NodeId} from '../../../fluence';
 import contract from '../../../fluence/contract';
 import { Dispatch, Action } from 'redux';
+import {DELETE_NODE} from "./delete-node";
 
 export const GET_NODE_RECEIVE = 'GET_NODE_RECEIVE';
 
@@ -18,12 +19,18 @@ export const retrieveNode = (nodeId: NodeId) => {
 /*
  * Reducer
  */
-export default (state = {}, action: any) => {
+export default (state: {[key: string]: Node;} = {}, action: any) => {
     switch (action.type) {
         case GET_NODE_RECEIVE: {
             return {
                 ...state,
                 [action.node.id]: action.node
+            };
+        }
+        case DELETE_NODE: {
+            delete state[action.nodeId];
+            return {
+                ...state
             };
         }
         default: {

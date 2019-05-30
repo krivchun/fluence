@@ -1,6 +1,7 @@
-import {getApp, AppId} from '../../../fluence';
+import {getApp, AppId, App} from '../../../fluence';
 import contract from '../../../fluence/contract';
 import { Dispatch, Action } from 'redux';
+import {DELETE_APP} from "./delete-app";
 
 export const GET_APP_RECEIVE = 'GET_APP_RECEIVE';
 
@@ -17,12 +18,18 @@ export const retrieveApp = (appId: AppId) => {
 /*
  * Reducer
  */
-export default (state = {}, action: any) => {
+export default (state: {[key: string]: App;} = {}, action: any) => {
     switch (action.type) {
         case GET_APP_RECEIVE: {
             return {
                 ...state,
                 [action.app.app_id]: action.app
+            };
+        }
+        case DELETE_APP: {
+            delete state[action.appId];
+            return {
+                ...state
             };
         }
         default: {

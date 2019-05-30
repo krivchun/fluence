@@ -1,20 +1,25 @@
 import * as React from 'react';
 import { connect } from 'react-redux';
 import { Link } from 'react-router-dom';
+import ReactModal from 'react-modal';
 import { match, withRouter } from 'react-router';
 import { Action } from 'redux';
 import { History } from 'history';
-import { contractAddress } from '../../../fluence/contract';
-import { App, AppId, Node } from '../../../fluence';
+import {contractAddress, dashboardContract, isMetamaskActive} from '../../../fluence/contract';
+import {account as demoAddress} from '../../../constants';
+import {App, AppId, AppRef, getAppRefs, getNodeRefs, Node, NodeRef} from '../../../fluence';
+import {DeployableAppId, deployableAppIds, deployableApps} from "../../../fluence/deployable";
 import { cutId } from '../../../utils';
-import { getDeployedApp } from '../../../utils/cookie';
 import FluenceApp from '../fluence-app';
 import FluenceNode from '../fluence-node';
 import FluenceDeployableApp from '../fluence-deployable-app';
 import FluenceAppsList from '../fluence-apps-list';
 import FluenceNodesList from '../fluence-nodes-list';
+import FluenceAppSnippet from '../fluence-app-snippet';
 import FluenceDeployList from '../fluence-deploy-list';
-import { restoreDeployed, resetDeployed } from '../../actions';
+import FluenceMenu from '../fluence-menu';
+import FluenceList from '../fluence-list';
+//import { restoreDeployed, resetDeployed } from '../../actions';
 import * as fluence from 'fluence';
 
 import 'bootstrap/dist/css/bootstrap.css';
@@ -31,6 +36,7 @@ export enum FluenceEntityType {
     App  = 'app',
     Node = 'node',
     DeployableApp = 'deploy',
+    Account = 'account',
 }
 
 interface State {}
@@ -38,21 +44,12 @@ interface State {}
 interface UrlParams {
     entityType: string;
     entityId: string;
-    appId: string;
+    entitySubType: string;
 }
 
 interface Props {
     match: match<UrlParams>;
-    history: History;
     loading: boolean;
-    restoreDeployed: (appId: string, appTypeId: string, history: History) => Action;
-    resetDeployed: () => Action;
-    apps: {
-        [key: string]: App;
-    };
-    nodes: {
-        [key: string]: Node;
-    };
 }
 
 class DashboardApp extends React.Component<Props, State> {
@@ -62,41 +59,50 @@ class DashboardApp extends React.Component<Props, State> {
         // Make fluence available from browser console
         (window as any).fluence = fluence;
 
-        const deployedApp = getDeployedApp();
-        if (deployedApp && this.props.match.path == '/') {
-            this.props.restoreDeployed(deployedApp.deployedAppId, deployedApp.deployedAppTypeId, this.props.history);
-        }
+        //getAppRefs(dashboardContract).then(apps => console.log(apps)).catch(err => console.log(err));
+        //getNodeRefs(dashboardContract).then(nodes => console.log(nodes)).catch(err => console.log(err));
+
+        //const deployedApp = getDeployedApp();
+        //if (deployedApp && this.props.match.path == '/') {
+            //this.props.restoreDeployed(deployedApp.deployedAppId, deployedApp.deployedAppTypeId, this.props.history);
+        //}
     }
 
-    checkAppExists = (appIds: AppId[]): void => {
-        const deployedApp = getDeployedApp();
-        if (deployedApp && appIds.indexOf(deployedApp.deployedAppId) === -1) {
-            if (
-                this.props.match.params.entityType == FluenceEntityType.DeployableApp
-                && this.props.match.params.entityId == deployedApp.deployedAppTypeId
-            ) {
-                this.props.history.push(`/`);
-            }
-            this.props.resetDeployed();
-        }
-    }
-
-    renderEntity(): React.ReactNode {
-        const entityType = this.props.match.params.entityType;
-        const entityId = this.props.match.params.entityId;
-        if (entityType && entityId) {
-            if (entityType === FluenceEntityType.App) {
-                return <FluenceApp appId={entityId}/>;
-            } else if (entityType === FluenceEntityType.Node) {
-                return <FluenceNode nodeId={entityId}/>;
-            } else if (entityType === FluenceEntityType.DeployableApp) {
-                const appId = this.props.match.params.appId;
-                return <FluenceDeployableApp id={entityId} deployedAppId={appId}/>;
+    renderEntity(entityType: FluenceEntityType, entityId: string): React.ReactNode | React.ReactNode[] {
+        if(entityType && entityId) {
+            switch (entityType) {
+                case FluenceEntityType.App: {
+                    return [
+                        <div className="col-md-6 col-xs-12">
+                            <FluenceApp appId={entityId}/>
+                        </div>,
+                        <div className="col-md-6 col-xs-12">
+                            <FluenceAppSnippet appId={entityId}/>
+                        </div>,
+                    ];
+                }
+                case FluenceEntityType.Node: {
+                    return (
+                        <div className="col-md-6 col-xs-12">
+                            <FluenceNode nodeId={entityId}/>
+                        </div>
+                    );
+                }
+                case FluenceEntityType.DeployableApp: {
+                    return (
+                        <div className="col-md-6 col-xs-12">
+                            <FluenceDeployableApp id={entityId}/>
+                        </div>
+                    );
+                }
+                case FluenceEntityType.Account: {
+                    return this.renderEntity(this.props.match.params.entitySubType as FluenceEntityType, entityId);
+                }
             }
         }
 
         return (
-            <div className="col-md-4 col-xs-12">
+            <div className="col-md-6 col-xs-12">
                 <div className="box box-primary">
                     <div className="box-header with-border">
                         <h3 className="box-title">Fluence Network</h3>
@@ -118,6 +124,26 @@ class DashboardApp extends React.Component<Props, State> {
         );
     }
 
+    renderSectionLabel(entityType: FluenceEntityType): string {
+        switch (entityType) {
+            case FluenceEntityType.App: {
+                return 'Applications';
+            }
+            case FluenceEntityType.Node: {
+                return 'Nodes';
+            }
+            case FluenceEntityType.DeployableApp: {
+                return 'Deploy';
+            }
+            case FluenceEntityType.Account: {
+                return 'Account';
+            }
+            default: {
+                return 'Network status';
+            }
+        }
+    }
+
     render(): React.ReactNode {
         return (
             <div className="wrapper">
@@ -130,8 +156,11 @@ class DashboardApp extends React.Component<Props, State> {
 
                         <div className="navbar-custom-menu">
                             <ul className="nav navbar-nav">
+                                <li style={{display: isMetamaskActive() ? 'none' : 'block'}}>
+                                    <span className="fluence-header-label">Working in <span className="error">DEMO MODE</span></span>
+                                </li>
                                 <li>
-                                    <span className="fluence-contract-address">Network contract: <a
+                                    <span className="fluence-header-label">Network contract: <a
                                         href={'https://rinkeby.etherscan.io/address/' + contractAddress}
                                         title={contractAddress} target="_blank">{cutId(contractAddress)}</a></span>
                                 </li>
@@ -143,33 +172,23 @@ class DashboardApp extends React.Component<Props, State> {
                     </nav>
                 </header>
 
-                <div className="content-wrapper">
-                    <section className="content-header">
-                        <h1>Network status</h1>
-                    </section>
+                <div className="content-middle">
+                    <aside className="main-sidebar">
+                        <FluenceMenu entityType={this.props.match.params.entityType} entityId={this.props.match.params.entityId}/>
+                        <FluenceList entityType={this.props.match.params.entityType} entityId={this.props.match.params.entityId}/>
+                    </aside>
 
-                    <section className="content">
-                        <div className="row">
-                            <div className="col-md-3 col-xs-12">
-                                <div className="row">
-                                    <div className="col-md-12">
-                                        <FluenceDeployList/>
-                                    </div>
-                                </div>
-                                <div className="row">
-                                    <div className="col-md-12">
-                                        <FluenceAppsList appIdsRetrievedCallback={this.checkAppExists}/>
-                                    </div>
-                                </div>
-                                <div className="row">
-                                    <div className="col-md-12">
-                                        <FluenceNodesList/>
-                                    </div>
-                                </div>
+                    <div className="content-wrapper">
+                        <section className="content-header">
+                            <h1>{this.renderSectionLabel(this.props.match.params.entityType as FluenceEntityType)}</h1>
+                        </section>
+
+                        <section className="content">
+                            <div className="row">
+                                {this.renderEntity(this.props.match.params.entityType as FluenceEntityType, this.props.match.params.entityId)}
                             </div>
-                            {this.renderEntity()}
-                        </div>
-                    </section>
+                        </section>
+                    </div>
                 </div>
 
                 <footer className="main-footer">
@@ -179,6 +198,29 @@ class DashboardApp extends React.Component<Props, State> {
                     <strong><a href="https://github.com/fluencelabs/tutorials">Tutorials&nbsp;&nbsp;</a>|&nbsp;&nbsp;</strong>
                     <strong><a href="https://fluence.network/docs">Documentation</a></strong>
                 </footer>
+
+                <ReactModal
+                    isOpen={false}
+                    onAfterOpen={() => {}}
+                    onRequestClose={() => {}}
+                    contentLabel="Example Modal"
+                >
+                    <div className="modal-content">
+                        <div className="modal-header">
+                            <button type="button" className="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">×</span></button>
+                            <h4 className="modal-title">Default Modal</h4>
+                        </div>
+                        <div className="modal-body">
+                            <p>One fine body…</p>
+                        </div>
+                        <div className="modal-footer">
+                            <button type="button" className="btn btn-default pull-left" data-dismiss="modal">Close
+                            </button>
+                            <button type="button" className="btn btn-primary">Save changes</button>
+                        </div>
+                    </div>
+                </ReactModal>
             </div>
         );
     }
@@ -186,13 +228,8 @@ class DashboardApp extends React.Component<Props, State> {
 
 const mapStateToProps = (state: any) => ({
     loading: state.loading.isLoading,
-    nodes: state.nodes,
-    apps: state.apps,
 });
 
-const mapDispatchToProps = {
-    restoreDeployed,
-    resetDeployed,
-};
+const mapDispatchToProps = {};
 
 export default withRouter(connect(mapStateToProps, mapDispatchToProps)(DashboardApp));

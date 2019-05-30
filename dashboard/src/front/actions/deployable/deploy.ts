@@ -1,5 +1,13 @@
-import contract from '../../../fluence/contract';
-import {checkLogs, DeployableApp, send, txParams, deployableApps, DeployedAppState} from "../../../fluence/deployable";
+import contract, {getUserAddress, isMetamaskActive} from '../../../fluence/contract';
+import {
+    checkLogs,
+    DeployableApp,
+    send,
+    txParams,
+    deployableApps,
+    DeployedAppState,
+    sendUnsigned
+} from "../../../fluence/deployable";
 import {History} from 'history';
 import {privateKey, appUploadUrl} from "../../../constants";
 import {Action, Dispatch} from "redux";
@@ -8,6 +16,8 @@ import EthereumTx from "ethereumjs-tx";
 import {getApp, getNode, getNodeAppStatus} from "../../../fluence";
 import {fromIpfsHash, storageToString32} from "../../../utils";
 import {clearDeployedApp, saveDeployedApp} from "../../../utils/cookie";
+import {retrieveAppRefs} from "..";
+import {ThunkDispatch} from "redux-thunk";
 
 export const DEPLOY_CLEAR_STATE = 'DEPLOY_CLEAR_STATE';
 export const DEPLOY_STATE_PREPARE = 'DEPLOY_STATE_PREPARE';
@@ -20,7 +30,7 @@ export const APP_ENQUEUED = 'APP_ENQUEUED';
 export const APP_DEPLOY_FAILED = 'APP_DEPLOY_FAILED';
 
 export const deploy = (app: DeployableApp, appTypeId: string, storageHashOverload: string, history: History) => {
-    return async (dispatch: Dispatch): Promise<Action> => {
+    return async (dispatch: ThunkDispatch<any, void, Action>): Promise<Action> => {
 
         dispatch({type: DEPLOY_CLEAR_STATE});
         dispatch({type: DEPLOY_STATE_PREPARE});
@@ -28,11 +38,20 @@ export const deploy = (app: DeployableApp, appTypeId: string, storageHashOverloa
         let storageHash = app.selfUpload && storageHashOverload ? storageHashOverload : app.storageHash;
         let storageType = storageToString32(app.storageType);
         let txData = contract.methods.addApp(storageHash, "0x0", storageType, app.clusterSize, []).encodeABI();
-        let tx = new EthereumTx(await txParams(txData));
-        tx.sign(privateKey);
 
         dispatch({type: DEPLOY_STATE_TRX});
-        let receipt = await send(tx.serialize());
+
+        let receipt = null;
+        if (isMetamaskActive()) {
+                receipt = await sendUnsigned({
+                    from: getUserAddress(),
+                    ...await txParams(txData),
+                });
+        } else {
+            let tx = new EthereumTx(await txParams(txData));
+            tx.sign(privateKey);
+            receipt = await send(tx.serialize());
+        }
 
         if (!receipt.status) {
             return dispatch({type: DEPLOY_TX_REVERTED});
@@ -40,8 +59,8 @@ export const deploy = (app: DeployableApp, appTypeId: string, storageHashOverloa
 
         let deployStatus = checkLogs(receipt);
 
-        saveDeployedApp(String(deployStatus.appId), appTypeId);
-        history.push(`/deploy/${appTypeId}/${deployStatus.appId}`);
+        //saveDeployedApp(String(deployStatus.appId), appTypeId);
+        //history.push(`/deploy/${appTypeId}/${deployStatus.appId}`);
 
         if (deployStatus.state == DeployedAppState.Deployed) {
             dispatch({type: DEPLOY_STATE_CLUSTER_CHECK, note: 'retrieving app'});
@@ -78,6 +97,10 @@ export const deploy = (app: DeployableApp, appTypeId: string, storageHashOverloa
 
             await checkCluster();
 
+            await dispatch(retrieveAppRefs());
+
+            history.push(`/account/app/${deployStatus.appId}`);
+
             return dispatch({
                 type: APP_DEPLOYED,
                 appId: deployStatus.appId,
@@ -97,7 +120,7 @@ export const deploy = (app: DeployableApp, appTypeId: string, storageHashOverloa
     };
 };
 
-export const DEPLOY_RESTORE = 'DEPLOY_RESTORE';
+/*export const DEPLOY_RESTORE = 'DEPLOY_RESTORE';
 export const restoreDeployed = (appId: string, appTypeId: string, history: History) => {
     return (dispatch: Dispatch): Action => {
         history.push(`/deploy/${appTypeId}/${appId}`);
@@ -117,7 +140,7 @@ export const resetDeployed = () => {
             type: DEPLOY_RESET
         });
     };
-};
+};*/
 
 export const DEPLOY_UPLOAD_STARTED = 'DEPLOY_UPLOAD_STARTED';
 export const DEPLOY_UPLOAD_FINISHED = 'DEPLOY_UPLOAD_FINISHED';
@@ -196,15 +219,23 @@ export default (state = {
         case APP_ENQUEUED: {
             return {
                 ...state,
+                deployState: undefined,
+                app: undefined,
+                appId: undefined,
+                trxHash: undefined,
+                upload: undefined,
+            };
+            /*return {
+                ...state,
                 deployState: {
                     state: 'end'
                 },
                 app: action.app,
                 appId: action.appId,
                 trxHash: action.trxHash
-            };
+            };*/
         }
-        case DEPLOY_RESTORE: {
+        /*case DEPLOY_RESTORE: {
             return {
                 ...state,
                 deployState: {
@@ -221,7 +252,7 @@ export default (state = {
                 app: undefined,
                 appId: undefined,
             };
-        }
+        }*/
         case DEPLOY_UPLOAD_STARTED: {
             return {
                 ...state,

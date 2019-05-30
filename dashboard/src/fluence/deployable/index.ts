@@ -5,6 +5,7 @@ import { AppId } from '../apps';
 import abi from '../../abi/Network.json';
 
 import { parseLog } from 'ethereum-event-logs';
+import {Tx} from "web3/eth/types";
 
 export enum StorageType {
     Swarm = 0,
@@ -93,6 +94,16 @@ export function send(signedTx: Buffer): Promise<TransactionReceipt> {
         });
 }
 
+// Sends a transaction to Ethereum
+export function sendUnsigned(tx: Tx): Promise<TransactionReceipt> {
+    return web3js
+        .eth
+        .sendTransaction(tx)
+        .once('transactionHash', h => {
+            console.log('tx hash ' + h);
+        });
+}
+
 // Builds TxParams object to later use for building a transaction
 export async function txParams(txData: string): Promise<any> {
     const nonce = web3js.utils.numberToHex(await web3js.eth.getTransactionCount(account, 'pending'));
@@ -153,9 +164,9 @@ export function checkLogs(receipt: TransactionReceipt): DeployedApp {
 }
 
 export function findDeployableAppByStorageHash(storageHash: string): DeployableApp | undefined {
-    const deployableAppId = deployableAppIds.find(id => {
-        return deployableApps[id].storageHash.toLowerCase() == storageHash.toLowerCase();
+    const deployableApp = Object.values(deployableApps).find(deployableApp => {
+        return deployableApp.storageHash.toLowerCase() == storageHash.toLowerCase();
     });
 
-    return deployableAppId ? deployableApps[deployableAppId] : undefined;
+    return deployableApp ? deployableApp : undefined;
 }
